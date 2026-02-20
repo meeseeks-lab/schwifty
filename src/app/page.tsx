@@ -291,20 +291,19 @@ export default function Home() {
 
           {/* Embedded Strudel REPL */}
           <div className="flex-1 relative">
-            {!isPlaying ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-[#71717a]">
+            {!isPlaying && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-[#71717a] z-10">
                 <p className="text-lg">🎵</p>
                 <p className="text-sm">Chat or click a preset to load the Strudel REPL</p>
                 <p className="text-xs text-[#52525b]">Then press ▶ play in the REPL to hear music</p>
               </div>
-            ) : (
-              <iframe
-                ref={iframeRef}
-                className="absolute inset-0 w-full h-full border-0"
-                allow="autoplay; microphone"
-                sandbox="allow-scripts allow-same-origin allow-popups"
-              />
             )}
+            <iframe
+              ref={iframeRef}
+              className={`absolute inset-0 w-full h-full border-0 ${isPlaying ? '' : 'invisible'}`}
+              allow="autoplay; microphone"
+              sandbox="allow-scripts allow-same-origin allow-popups"
+            />
           </div>
         </div>
       </div>
