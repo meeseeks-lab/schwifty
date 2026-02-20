@@ -15,23 +15,19 @@
 <body>
 <script type="module">
 import * as core from '@strudel/core';
-import { mini } from '@strudel/mini';
+import * as mini from '@strudel/mini';
 import * as webaudio from '@strudel/webaudio';
 import * as tonal from '@strudel/tonal';
 
-// Expose all pattern functions globally so eval'd code can use them
-const allExports = { ...core, ...webaudio, ...tonal };
-for (const [key, val] of Object.entries(allExports)) {
-  window[key] = val;
-}
-// Common aliases
-window.stack = core.stack;
-window.note = core.note;
-window.s = core.s;
-window.seq = core.seq;
-window.cat = core.cat;
-window.silence = core.silence;
-window.samples = webaudio.samples;
+// Register all functions in Strudel's eval scope — this is what evaluate() uses internally
+core.evalScope(
+  core.controls,
+  core,
+  mini,
+  webaudio,
+  tonal,
+  { samples: webaudio.samples }
+);
 
 let scheduler = null;
 
@@ -57,7 +53,7 @@ window.addEventListener('message', async (e) => {
   if (e.data?.type === 'eval') {
     const ok = await init();
     if (!ok) {
-      window.parent.postMessage({ type: 'error', message: 'Audio engine failed to initialize' }, '*');
+      window.parent.postMessage({ type: 'error', message: 'Audio engine failed to init' }, '*');
       return;
     }
     try {
