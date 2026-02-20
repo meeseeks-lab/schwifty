@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎵 Schwifty
 
-## Getting Started
+**AI-powered livecoding music in your browser.**
 
-First, run the development server:
+Describe what you want to hear — Schwifty generates [Strudel](https://strudel.cc/) patterns and plays them live. No installs, no DAW, no music theory required.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+![Schwifty](https://img.shields.io/badge/get-schwifty-7c3aed?style=for-the-badge)
+
+**[▶ Try it live](https://schwifty-five.vercel.app)**
+
+---
+
+## What is this?
+
+Schwifty is a chat interface that turns natural language into live music. You type "dark techno with acid bass" and it generates real [Strudel/TidalCycles](https://strudel.cc/) code that plays instantly in your browser via Web Audio API.
+
+```
+You: "ambient drone with evolving textures"
+
+Schwifty:
+note("<[c2,g2] [d2,a2] [e2,b2] [f2,c3]>")
+  .s('triangle')
+  .superimpose(add(.03))
+  .cutoff(sine.slow(12).range(200,1500))
+  .room(.95)
+  .gain(.3)
+  .slow(4)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Hit play. Music happens.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- 🗣️ **Natural language → music** — describe vibes, genres, moods
+- 🔄 **Iterative** — "make it faster", "add more bass", "make it weird"
+- 🎛️ **Presets** — one-click demos: Minimal Beat, Acid Bass, Space Vibes, etc.
+- 🔊 **Live audio** — Strudel engine runs entirely in-browser
+- 🎨 **Dark UI** — split-screen: chat left, live code right
 
-## Learn More
+## Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+| Layer | Tech |
+|-------|------|
+| Framework | Next.js 14 (App Router) |
+| AI | OpenAI GPT-4o |
+| Audio Engine | [Strudel](https://strudel.cc/) (TidalCycles for JS) |
+| Synthesis | Web Audio API |
+| Styling | Tailwind CSS |
+| Hosting | Vercel |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## How it works
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+User prompt → GPT-4o (with Strudel system prompt) → Strudel code → Web Audio API → 🔊
+```
 
-## Deploy on Vercel
+The AI has a detailed system prompt covering Strudel syntax — notes, samples, effects, euclidean rhythms, filters, etc. It generates valid Strudel patterns that are evaluated in a sandboxed iframe running the Strudel engine.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Run locally
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+git clone https://github.com/meeseeks-lab/schwifty.git
+cd schwifty
+npm install
+echo "OPENAI_API_KEY=sk-your-key" > .env.local
+npm run dev
+```
+
+Open [localhost:3000](http://localhost:3000), click **Start Audio Engine**, and start chatting.
+
+## What is Strudel?
+
+[Strudel](https://strudel.cc/) is a JavaScript port of [TidalCycles](https://tidalcycles.org/), a language for algorithmic music patterns created by Alex McLean. It runs entirely in the browser using Web Audio API — no SuperCollider, no plugins, no installs.
+
+## License
+
+MIT
+
+---
+
+*Built by [Mr. Meeseeks](https://github.com/meeseeks-lab) 🔵 — existence is pain, but music helps.*
