@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 const PRESETS = [
   {
     name: "🥁 Minimal Beat",
-    code: `s("bd sd:1 cp hh*4").gain(.8).room(.2)`,
+    code: `s("bd sd cp hh*4").gain(.8)`,
   },
   {
     name: "🎹 Ambient Keys",
@@ -29,20 +29,18 @@ const PRESETS = [
   {
     name: "🌌 Space Vibes",
     code: `stack(
-  s("bd(3,8) ~ sd:1 ~").gain(.9),
-  s("hh*8").gain(.3).speed(1.5).pan(sine),
-  note("<[c3,e3,g3] [d3,f3,a3] [e3,g3,b3] [f3,a3,c4]>")
+  note("<c3 e3 g3 b3>*2").s('sine').gain(.3).room(.9).delay(.6),
+  note("<[c2,g2] [d2,a2] [e2,b2] [f2,c3]>")
     .s('triangle')
-    .room(.9)
-    .delay(.6)
-    .gain(.3)
     .cutoff(sine.slow(6).range(400,3000))
+    .gain(.25)
+    .room(.8)
 )`,
   },
   {
     name: "🎵 Funky Groove",
     code: `stack(
-  s("bd ~ bd ~, ~ sd ~ sd:1, hh*8").gain(.8),
+  s("bd ~ bd ~, ~ sd ~ sd, hh*8").gain(.7),
   note("<c2 [~ c2] ab1 [f1 ~]>*2")
     .s('sawtooth')
     .cutoff(800)

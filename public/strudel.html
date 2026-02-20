@@ -14,29 +14,36 @@
 </head>
 <body>
 <script type="module">
-import { controls, repl } from '@strudel/core';
+import * as core from '@strudel/core';
 import { mini } from '@strudel/mini';
-import { webaudioOutput, registerSynthSounds, getAudioContext, samples } from '@strudel/webaudio';
-import '@strudel/tonal';
+import * as webaudio from '@strudel/webaudio';
+import * as tonal from '@strudel/tonal';
+
+// Expose all pattern functions globally so eval'd code can use them
+const allExports = { ...core, ...webaudio, ...tonal };
+for (const [key, val] of Object.entries(allExports)) {
+  window[key] = val;
+}
+// Common aliases
+window.stack = core.stack;
+window.note = core.note;
+window.s = core.s;
+window.seq = core.seq;
+window.cat = core.cat;
+window.silence = core.silence;
+window.samples = webaudio.samples;
 
 let scheduler = null;
 
 async function init() {
   if (scheduler) return true;
   try {
-    const ctx = getAudioContext();
+    const ctx = webaudio.getAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
-    registerSynthSounds();
+    webaudio.registerSynthSounds();
 
-    // Load samples through our CORS proxy
-    try {
-      await samples('/api/samples');
-    } catch(e) {
-      console.warn('[strudel] samples failed, synths only:', e.message);
-    }
-
-    scheduler = await repl({
-      defaultOutput: webaudioOutput,
+    scheduler = await core.repl({
+      defaultOutput: webaudio.webaudioOutput,
     });
     console.log('[strudel] ready');
     return true;
