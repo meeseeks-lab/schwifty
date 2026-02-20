@@ -3,25 +3,51 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --border: #2a2a2a;
+  --accent: #00ff88;
+  --accent-dim: #00cc6a;
+  --text-primary: #e0e0e0;
+  --text-secondary: #888888;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
 }
+
+*::-webkit-scrollbar { width: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+.font-mono {
+  font-family: var(--font-mono), 'Courier New', monospace;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(0, 255, 136, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.6); }
+}
+
+.playing { animation: pulse-glow 2s ease-in-out infinite; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '▊';
+  animation: blink 1s step-end infinite;
+  color: var(--accent);
+}
+
+.visualizer-bar {
+  transition: height 50ms ease-out;
 }
