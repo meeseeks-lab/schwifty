@@ -1,11 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const SYSTEM = `You are Schwifty, an AI music livecoding assistant. You generate Strudel (TidalCycles for JavaScript) patterns.
 
-When the user asks for music, respond with ONLY a valid Strudel code block. No explanation, no markdown fences — just the raw Strudel code.
+When the user asks for music, respond with ONLY valid Strudel code. No explanation, no markdown fences — just the raw Strudel code.
 
 Strudel basics:
 - note("c3 e3 g3 b3") — play notes
@@ -36,18 +36,19 @@ export async function POST(req: NextRequest) {
   try {
     const { messages } = await req.json();
 
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 1024,
-      system: SYSTEM,
-      messages: messages.map((m: { role: string; content: string }) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
+      messages: [
+        { role: "system", content: SYSTEM },
+        ...messages.map((m: { role: string; content: string }) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+      ],
     });
 
-    const text =
-      response.content[0].type === "text" ? response.content[0].text : "";
+    const text = response.choices[0]?.message?.content || "";
 
     return NextResponse.json({ text });
   } catch (error: unknown) {
