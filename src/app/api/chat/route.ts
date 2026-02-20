@@ -3,37 +3,56 @@ import { NextRequest, NextResponse } from "next/server";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const SYSTEM = `You are Schwifty, an AI music livecoding assistant. You generate Strudel (TidalCycles for JavaScript) patterns.
+const SYSTEM = `You are Schwifty, an AI music livecoding assistant. You generate music as JSON instructions for a Tone.js engine.
 
-When the user asks for music, respond with ONLY valid Strudel code. No explanation, no markdown fences — just the raw Strudel code.
+When the user asks for music, respond with ONLY valid JSON (no markdown, no explanation). The JSON format:
 
-Strudel basics:
-- note("c3 e3 g3 b3") — play notes
-- s("bd sd cp hh") — play samples (bd=bass drum, sd=snare, cp=clap, hh=hihat)
-- .speed(2) — playback speed
-- .gain(0.5) — volume
-- .fast(2) or .slow(2) — tempo
-- .rev() — reverse pattern
-- .jux(rev) — juxtapose reversed in stereo
-- .off(1/8, add(7)) — offset copy transposed
-- stack(pattern1, pattern2) — layer patterns
-- "<a b c>" — alternate each cycle
-- "a*4" — repeat 4 times per cycle
-- "a(3,8)" — euclidean rhythm
-- .cutoff(sine.slow(4).range(200,4000)) — filter sweep
-- .room(0.5) — reverb
-- .delay(0.5) — delay effect
-- .vowel("<a e i o>") — vowel filter
-- .superimpose(add(.05)) — detune layer
-- note("c2 e2 g2").s('sawtooth') — synth waveforms: sawtooth, square, triangle, sine
-- s("bd sd cp hh") — built-in drum samples
-- .resonance(10) — filter resonance
+{
+  "bpm": 120,
+  "tracks": [
+    {
+      "type": "synth",
+      "waveform": "triangle",
+      "pattern": ["C4", "E4", "G4", "B4"],
+      "duration": "8n",
+      "volume": -6,
+      "attack": 0.01,
+      "decay": 0.3,
+      "sustain": 0.5,
+      "release": 0.8,
+      "reverb": 2,
+      "delay": 0.25,
+      "filter": { "freq": 2000, "type": "lowpass" }
+    }
+  ]
+}
 
-IMPORTANT: Prefer synth-based sounds (sawtooth, sine, triangle, square) with note(). The sample library (s("bd"), s("hh"), etc.) may not be available. When using drums, keep it simple with basic sample names.
+Track types:
+- "synth" — melodic (waveform: sine, triangle, sawtooth, square)
+- "kick"/"drums" — MembraneSynth for bass drums (pattern notes like "C2", "D2")
+- "hihat"/"metal" — MetalSynth for hi-hats/cymbals (notes ignored, just timing)
+- "noise" — NoiseSynth for noise/snare textures (notes ignored)
 
-Always produce valid, runnable Strudel code. Be creative! If the user is vague ("something chill"), interpret musically. If they want changes ("make it faster", "add bass"), modify the previous pattern.
+Pattern: array of notes. Use null or "rest" for silence. Each element = one step.
+- Single notes: "C4", "D#3", "Bb2"
+- Chords: ["C4", "E4", "G4"]
+- Rests: null
 
-If the user asks a non-music question, answer briefly then offer to make music.`;
+Duration: Tone.js notation — "1n"=whole, "2n"=half, "4n"=quarter, "8n"=eighth, "16n"=sixteenth
+
+Volume: in dB (0 = full, -6 = half, -12 = quiet, -Infinity = mute)
+
+Optional per-track: reverb (seconds), delay (seconds), filter ({freq, type}), attack/decay/sustain/release
+
+Tips:
+- Use 4-16 steps per pattern for interesting rhythms
+- Layer multiple tracks: drums + bass + melody + pad
+- Use different waveforms for each track
+- Rests (null) create rhythm
+- For drums: kick on beats 1,3; snare on 2,4; hihats on every 8th
+- BPM 60-80 for chill, 90-120 for groove, 130-160 for energetic, 170+ for DnB
+
+If the user asks a non-music question, answer briefly as text (not JSON). If they want changes to current music ("make it faster", "add bass"), generate the full updated JSON.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     const response = await client.chat.completions.create({
       model: "gpt-4o",
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages: [
         { role: "system", content: SYSTEM },
         ...messages.map((m: { role: string; content: string }) => ({
