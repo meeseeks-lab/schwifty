@@ -4,49 +4,35 @@
   <meta charset="utf-8">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; background: #0a0a0a; overflow: hidden; }
-    strudel-editor { display: block; height: 100%; }
+    html, body { width: 100%; height: 100%; background: #0a0a0a; overflow: hidden; }
+    #repl { width: 100%; height: 100%; }
   </style>
-  <script src="https://unpkg.com/@strudel/repl@latest"></script>
 </head>
 <body>
-  <strudel-editor id="repl"></strudel-editor>
+  <div id="container"></div>
+  <script src="https://unpkg.com/@strudel/repl@latest"></script>
   <script>
-    const el = document.getElementById('repl');
-
-    // Wait for the web component to be fully initialized
-    function waitForEditor() {
-      return new Promise((resolve) => {
-        const check = () => {
-          // The strudel-editor exposes its internals after connectedCallback
-          if (el.shadowRoot && el.shadowRoot.querySelector('.play-button, button')) {
-            resolve();
-          } else {
-            setTimeout(check, 300);
-          }
-        };
-        check();
-      });
+    // Read initial code from hash
+    let initialCode = 's("bd sd cp hh")';
+    if (window.location.hash.length > 1) {
+      try {
+        initialCode = decodeURIComponent(escape(atob(window.location.hash.slice(1))));
+      } catch(e) { console.error('decode error', e); }
     }
 
-    window.addEventListener('message', async (e) => {
-      if (e.data?.type === 'setCode') {
-        await waitForEditor();
-        // Set code via the web component's attribute
+    // Create the editor element with initial code
+    const el = document.createElement('strudel-editor');
+    el.id = 'repl';
+    el.setAttribute('code', initialCode);
+    document.getElementById('container').appendChild(el);
+
+    // Listen for code updates from parent
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'setCode' && e.data.code) {
         el.setAttribute('code', e.data.code);
         window.parent.postMessage({ type: 'codeSet' }, '*');
       }
     });
-
-    // Check for initial code from URL hash
-    if (window.location.hash) {
-      try {
-        const code = decodeURIComponent(escape(atob(window.location.hash.slice(1))));
-        waitForEditor().then(() => {
-          el.setAttribute('code', code);
-        });
-      } catch(e) {}
-    }
 
     window.parent.postMessage({ type: 'ready' }, '*');
   </script>
