@@ -64,36 +64,57 @@ export default function Home() {
   const [currentCode, setCurrentCode] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
+  const [engineError, setEngineError] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const engineRef = useRef<{
+    evaluate: (code: string) => Promise<void>;
+    stop: () => void;
+  } | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const playCode = useCallback(
-    (code: string) => {
+    async (code: string) => {
       setCurrentCode(code);
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(
-          { type: "eval", code },
-          "*"
-        );
-        setIsPlaying(true);
+      setEngineError("");
+      if (engineRef.current) {
+        try {
+          await engineRef.current.evaluate(code);
+          setIsPlaying(true);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Eval error";
+          setEngineError(msg);
+          console.error("[strudel] eval:", err);
+        }
       }
     },
     []
   );
 
   const stopCode = useCallback(() => {
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({ type: "stop" }, "*");
+    if (engineRef.current) {
+      engineRef.current.stop();
       setIsPlaying(false);
     }
   }, []);
 
-  const initAudio = useCallback(() => {
-    setAudioReady(true);
+  const initAudio = useCallback(async () => {
+    try {
+      const engine = await import("./strudel-engine");
+      const ok = await engine.initStrudel();
+      if (ok) {
+        engineRef.current = engine;
+        setAudioReady(true);
+      } else {
+        setEngineError("Failed to initialize audio engine");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Init error";
+      setEngineError(msg);
+      console.error("[strudel] init:", err);
+    }
   }, []);
 
   const looksLikeCode = (text: string) => {
@@ -195,6 +216,9 @@ export default function Home() {
               ))}
             </div>
           )}
+          {engineError && (
+            <span className="text-xs text-[#ef4444]">{engineError}</span>
+          )}
         </div>
       </header>
 
@@ -294,13 +318,16 @@ export default function Home() {
         {/* Code + Audio Panel */}
         <div className="flex-1 flex flex-col bg-[#0a0a0a]">
           {!audioReady ? (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex-1 flex flex-col items-center justify-center gap-4">
               <button
                 onClick={initAudio}
                 className="px-8 py-4 bg-[#7c3aed] hover:bg-[#6d28d9] rounded-xl text-lg font-bold transition-all hover:scale-105 shadow-lg shadow-[#7c3aed]/20"
               >
                 🎵 Start Audio Engine
               </button>
+              {engineError && (
+                <p className="text-sm text-[#ef4444] max-w-md text-center">{engineError}</p>
+              )}
             </div>
           ) : (
             <>
@@ -331,14 +358,6 @@ export default function Home() {
                   )}
                 </div>
               </div>
-
-              {/* Strudel audio engine iframe — off-screen but not hidden (browsers mute hidden iframes) */}
-              <iframe
-                ref={iframeRef}
-                src="/strudel.html"
-                className="absolute -left-[9999px] w-[1px] h-[1px]"
-                allow="autoplay; microphone"
-              />
             </>
           )}
         </div>
