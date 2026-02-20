@@ -3,169 +3,126 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 const PRESETS = [
-  { name: "🥁 808 Beat", code: `stack(\n  s("bd*2 [~ bd] bd ~"),\n  s("~ sd ~ sd"),\n  s("hh*8")\n).bank("RolandTR808")` },
-  { name: "🎹 Acid Bass", code: `note("<c2 c2 eb2 f2>*2")\n  .s("sawtooth")\n  .lpf(sine.slow(4).range(200, 4000))\n  .resonance(15)\n  .decay(.1).sustain(0)` },
-  { name: "🌊 Ambient", code: `note("c4 e4 g4 b4".slow(4))\n  .s("sine")\n  .room(0.9)\n  .delay(0.6)\n  .gain(0.5)` },
-  { name: "🎵 Melody", code: `note("<c4 [e4 g4] a4 [g4 e4]>")\n  .s("square")\n  .lpf(1200)\n  .decay(.2).sustain(.3)\n  .delay(0.3).room(0.4)` },
-  { name: "🪩 Funk", code: `stack(\n  s("bd ~ bd [~ bd]"),\n  s("~ cp ~ cp"),\n  s("[hh hh] [hh oh] [hh hh] [hh ~]"),\n  note("<c3 c3 f3 g3>").s("sawtooth").lpf(600).gain(0.5)\n).bank("RolandTR808")` },
-  { name: "✨ Minimal", code: `s("bd sd:1")\n  .speed(perlin.range(.8,1.2))\n  .room(0.5)\n  .bank("RolandTR808")` },
+  {
+    name: "🥁 Minimal Beat",
+    code: `s("bd sd:1 cp hh*4").gain(.8).room(.2)`,
+  },
+  {
+    name: "🎹 Ambient Keys",
+    code: `note("<c3 e3 g3 b3>/2")
+  .s('triangle')
+  .cutoff(sine.slow(8).range(300,2000))
+  .gain(.4)
+  .room(.8)
+  .delay(.5)`,
+  },
+  {
+    name: "🔊 Acid Bass",
+    code: `note("<c2 c2 eb2 f2 c2 c2 eb2 g2>*2")
+  .s('sawtooth')
+  .cutoff(sine.slow(4).range(200,5000))
+  .resonance(15)
+  .gain(.5)
+  .decay(.1)
+  .sustain(0)`,
+  },
+  {
+    name: "🌌 Space Vibes",
+    code: `stack(
+  s("bd(3,8) ~ sd:1 ~").gain(.9),
+  s("hh*8").gain(.3).speed(1.5).pan(sine),
+  note("<[c3,e3,g3] [d3,f3,a3] [e3,g3,b3] [f3,a3,c4]>")
+    .s('triangle')
+    .room(.9)
+    .delay(.6)
+    .gain(.3)
+    .cutoff(sine.slow(6).range(400,3000))
+)`,
+  },
+  {
+    name: "🎵 Funky Groove",
+    code: `stack(
+  s("bd ~ bd ~, ~ sd ~ sd:1, hh*8").gain(.8),
+  note("<c2 [~ c2] ab1 [f1 ~]>*2")
+    .s('sawtooth')
+    .cutoff(800)
+    .gain(.5)
+    .decay(.15)
+    .sustain(0)
+)`,
+  },
 ];
 
-interface Message {
+type Message = {
   role: "user" | "assistant";
   content: string;
-  code?: string;
-}
-
-function extractCode(text: string): { message: string; code: string | null } {
-  // Try to find code blocks
-  const codeBlockMatch = text.match(/```(?:js|javascript|strudel)?\n?([\s\S]*?)```/);
-  if (codeBlockMatch) {
-    const msg = text.replace(/```(?:js|javascript|strudel)?\n?[\s\S]*?```/, "").trim();
-    return { message: msg, code: codeBlockMatch[1].trim() };
-  }
-  
-  // Check if the entire response looks like code (starts with common Strudel functions)
-  const lines = text.trim().split("\n");
-  const codePatterns = /^(note|s|sound|stack|cat|seq|samples|n)\s*\(/;
-  if (codePatterns.test(lines[0])) {
-    return { message: "", code: text.trim() };
-  }
-  
-  // Try to split on blank line - text before, code after
-  const parts = text.split(/\n\n/);
-  if (parts.length >= 2) {
-    const lastPart = parts[parts.length - 1].trim();
-    if (codePatterns.test(lastPart)) {
-      return { message: parts.slice(0, -1).join("\n\n").trim(), code: lastPart };
-    }
-  }
-  
-  return { message: text, code: null };
-}
+  isCode?: boolean;
+};
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [code, setCode] = useState(PRESETS[0].code);
+  const [currentCode, setCurrentCode] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const replRef = useRef<any>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animFrameRef = useRef<number>(0);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Listen for iframe messages
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data.type === "playing") setIsPlaying(true);
-      if (e.data.type === "stopped") setIsPlaying(false);
-      if (e.data.type === "error") setError(e.data.message);
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, []);
-
-  // Scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Initialize Strudel via dynamic import from CDN
-  const initStrudel = useCallback(async () => {
-    if (replRef.current) return;
-    try {
-      // @ts-ignore - loaded from CDN
-      if (!window.__strudelLoaded) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://unpkg.com/@strudel/repl@latest";
-          script.type = "module";
-          script.onload = () => {
-            // @ts-ignore
-            window.__strudelLoaded = true;
-            resolve();
-          };
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-        // Give it a moment to register
-        await new Promise(r => setTimeout(r, 500));
-      }
-    } catch (e) {
-      console.error("Failed to load Strudel:", e);
-    }
-  }, []);
-
-  // Visualizer
-  const drawVisualizer = useCallback(() => {
-    const canvas = canvasRef.current;
-    const analyser = analyserRef.current;
-    if (!canvas || !analyser) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    const draw = () => {
-      animFrameRef.current = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArray);
-
-      ctx.fillStyle = "rgba(10, 10, 10, 0.2)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const barWidth = (canvas.width / bufferLength) * 2.5;
-      let x = 0;
-
-      for (let i = 0; i < bufferLength; i++) {
-        const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
-        const hue = (i / bufferLength) * 120 + 120; // green to cyan
-        ctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.8)`;
-        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        x += barWidth + 1;
-      }
-    };
-    draw();
-  }, []);
-
-  // Evaluate Strudel code using the Web Audio API directly
-  const evaluate = useCallback(async (codeToEval: string) => {
-    setError(null);
-    try {
-      // Use the strudel web component approach via iframe
-      const iframe = document.getElementById("strudel-frame") as HTMLIFrameElement;
-      if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({ type: "eval", code: codeToEval }, "*");
+  const playCode = useCallback(
+    (code: string) => {
+      setCurrentCode(code);
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          { type: "eval", code },
+          "*"
+        );
         setIsPlaying(true);
       }
-    } catch (e: any) {
-      setError(e.message);
-      console.error("Eval error:", e);
+    },
+    []
+  );
+
+  const stopCode = useCallback(() => {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: "stop" }, "*");
+      setIsPlaying(false);
     }
   }, []);
 
-  const stopPlayback = useCallback(() => {
-    const iframe = document.getElementById("strudel-frame") as HTMLIFrameElement;
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage({ type: "stop" }, "*");
-    }
-    setIsPlaying(false);
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+  const initAudio = useCallback(() => {
+    setAudioReady(true);
   }, []);
 
-  const handleSend = async () => {
+  const looksLikeCode = (text: string) => {
+    const codeIndicators = [
+      /^s\(/m,
+      /^note\(/m,
+      /^stack\(/m,
+      /^samples\(/m,
+      /\.s\(/,
+      /\.gain\(/,
+      /\.cutoff\(/,
+      /\.room\(/,
+      /\.delay\(/,
+      /\.speed\(/,
+      /\.note\(/,
+      /\.fast\(/,
+      /\.slow\(/,
+    ];
+    return codeIndicators.some((r) => r.test(text));
+  };
+
+  const sendMessage = async () => {
     if (!input.trim() || loading) return;
-    const userMessage = input.trim();
-    setInput("");
-    
-    const newMessages = [...messages, { role: "user" as const, content: userMessage }];
+    const userMsg: Message = { role: "user", content: input.trim() };
+    const newMessages = [...messages, userMsg];
     setMessages(newMessages);
+    setInput("");
     setLoading(true);
 
     try {
@@ -173,114 +130,142 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: newMessages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
         }),
       });
-
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const { message, code: extractedCode } = extractCode(data.content);
-      
+      const isCode = looksLikeCode(data.text);
       const assistantMsg: Message = {
         role: "assistant",
-        content: message || data.content,
-        code: extractedCode || undefined,
+        content: data.text,
+        isCode,
       };
-      
       setMessages([...newMessages, assistantMsg]);
 
-      if (extractedCode) {
-        setCode(extractedCode);
-        // Auto-play the generated code
-        setTimeout(() => evaluate(extractedCode), 300);
+      if (isCode && audioReady) {
+        playCode(data.text);
       }
-    } catch (e: any) {
-      setMessages([...newMessages, { role: "assistant", content: `Error: ${e.message}` }]);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Failed";
+      setMessages([
+        ...newMessages,
+        { role: "assistant", content: `Error: ${errMsg}` },
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadPreset = (preset: typeof PRESETS[0]) => {
-    setCode(preset.code);
-    evaluate(preset.code);
-  };
-
   return (
-    <main className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a2a] bg-[#111]">
+      <header className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a2a] bg-[#0a0a0a] shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold tracking-tight">
-            <span className="text-[#00ff88]">⚡</span> Schwifty
+          <span className="text-2xl">🎵</span>
+          <h1 className="text-lg font-bold tracking-tight">
+            <span className="text-[#7c3aed]">Schwifty</span>
+            <span className="text-[#71717a] text-sm ml-2 font-normal">
+              AI Livecoding
+            </span>
           </h1>
-          <span className="text-xs text-[#666] hidden sm:inline">AI Live Coding Music</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isPlaying ? "bg-[#00ff88] playing" : "bg-[#333]"}`} />
-          <span className="text-xs text-[#666]">{isPlaying ? "playing" : "stopped"}</span>
+          {isPlaying && (
+            <button
+              onClick={stopCode}
+              className="px-3 py-1 text-sm bg-[#ef4444] hover:bg-[#dc2626] rounded transition-colors"
+            >
+              ■ Stop
+            </button>
+          )}
+          {isPlaying && (
+            <div className="flex gap-[2px] items-end h-4">
+              {[...Array(5)].map((_, i) => (
+                <div
+                  key={i}
+                  className="w-[3px] bg-[#10b981] rounded-full animate-pulse"
+                  style={{
+                    height: `${8 + Math.random() * 10}px`,
+                    animationDelay: `${i * 0.15}s`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex min-h-0">
-        {/* Left: Chat */}
-        <div className="w-[400px] min-w-[300px] flex flex-col border-r border-[#2a2a2a] bg-[#0d0d0d]">
-          {/* Presets */}
-          <div className="p-2 border-b border-[#2a2a2a] flex flex-wrap gap-1">
-            {PRESETS.map((p) => (
-              <button
-                key={p.name}
-                onClick={() => loadPreset(p)}
-                className="text-xs px-2 py-1 rounded bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] transition-colors"
-              >
-                {p.name}
-              </button>
-            ))}
-          </div>
-
+      {/* Main */}
+      <div className="flex flex-1 min-h-0">
+        {/* Chat Panel */}
+        <div className="w-[400px] flex flex-col border-r border-[#2a2a2a] bg-[#0a0a0a]">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
-              <div className="text-[#444] text-sm space-y-2 mt-8 text-center">
-                <p className="text-2xl">🎵</p>
-                <p>Describe music and I&apos;ll code it live</p>
-                <p className="text-xs">&quot;make a chill lo-fi beat&quot;</p>
-                <p className="text-xs">&quot;acid techno bassline&quot;</p>
-                <p className="text-xs">&quot;ambient generative melody&quot;</p>
+              <div className="text-[#71717a] text-sm space-y-4">
+                <p className="text-center mt-8">
+                  🎵 Describe what you want to hear
+                </p>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wider text-[#52525b]">
+                    Try saying:
+                  </p>
+                  {[
+                    "a chill lo-fi beat",
+                    "dark techno with acid bass",
+                    "ambient drone with evolving textures",
+                    "make it funky, 808 style",
+                  ].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setInput(s)}
+                      className="block w-full text-left px-3 py-2 rounded bg-[#141414] hover:bg-[#1a1a1a] text-[#a1a1aa] hover:text-white transition text-sm"
+                    >
+                      &quot;{s}&quot;
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
+
             {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                key={i}
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+              >
                 <div
-                  className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
                     m.role === "user"
-                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]"
-                      : "bg-[#1a1a1a] border border-[#2a2a2a] text-[#ccc]"
+                      ? "bg-[#7c3aed] text-white"
+                      : m.isCode
+                        ? "bg-[#141414] border border-[#2a2a2a] font-mono text-[#10b981]"
+                        : "bg-[#1a1a1a] text-[#e4e4e7]"
                   }`}
                 >
-                  {m.content && <p className="whitespace-pre-wrap">{m.content}</p>}
-                  {m.code && (
-                    <div className="mt-2">
-                      <pre className="font-mono text-xs bg-[#0a0a0a] p-2 rounded overflow-x-auto text-[#00ff88]/80">
-                        {m.code}
-                      </pre>
-                      <button
-                        onClick={() => { setCode(m.code!); evaluate(m.code!); }}
-                        className="mt-1 text-xs text-[#00ff88] hover:underline"
-                      >
-                        ▶ Play this
-                      </button>
-                    </div>
+                  <pre className="whitespace-pre-wrap break-words m-0 font-[inherit]">
+                    {m.content}
+                  </pre>
+                  {m.isCode && audioReady && (
+                    <button
+                      onClick={() => playCode(m.content)}
+                      className="mt-2 px-2 py-1 text-xs bg-[#7c3aed] hover:bg-[#6d28d9] rounded transition"
+                    >
+                      ▶ Play this
+                    </button>
                   )}
                 </div>
               </div>
             ))}
+
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-[#666]">
-                  <span className="cursor-blink">generating</span>
+                <div className="bg-[#1a1a1a] rounded-lg px-3 py-2 text-sm text-[#71717a]">
+                  composing...
                 </div>
               </div>
             )}
@@ -293,93 +278,73 @@ export default function Home() {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder="Describe music..."
-                className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#00ff88]/50 placeholder-[#555]"
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                placeholder="Describe the music..."
+                className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white placeholder-[#52525b] focus:outline-none focus:border-[#7c3aed] transition"
               />
               <button
-                onClick={handleSend}
+                onClick={sendMessage}
                 disabled={loading || !input.trim()}
-                className="px-4 py-2 bg-[#00ff88] text-black rounded-lg text-sm font-medium hover:bg-[#00cc6a] disabled:opacity-30 transition-colors"
+                className="px-4 py-2 bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-30 rounded-lg text-sm font-medium transition"
               >
-                Send
+                →
               </button>
             </div>
           </div>
         </div>
 
-        {/* Right: Editor + Visualizer */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Visualizer */}
-          <div className="h-24 bg-[#0a0a0a] border-b border-[#2a2a2a] relative overflow-hidden" id="visualizer-container">
-            <canvas ref={canvasRef} className="w-full h-full" width={800} height={96} />
-            {!isPlaying && (
-              <div className="absolute inset-0 flex items-center justify-center text-[#333] text-sm">
-                audio visualization
+        {/* Code + Audio Panel */}
+        <div className="flex-1 flex flex-col bg-[#0a0a0a]">
+          {!audioReady ? (
+            <div className="flex-1 flex items-center justify-center">
+              <button
+                onClick={initAudio}
+                className="px-8 py-4 bg-[#7c3aed] hover:bg-[#6d28d9] rounded-xl text-lg font-bold transition-all hover:scale-105 shadow-lg shadow-[#7c3aed]/20"
+              >
+                🎵 Start Audio Engine
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Presets */}
+              <div className="flex gap-2 p-3 border-b border-[#2a2a2a] overflow-x-auto shrink-0">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    onClick={() => playCode(p.code)}
+                    className="px-3 py-1 text-xs bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#2a2a2a] rounded-full whitespace-nowrap transition"
+                  >
+                    {p.name}
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
 
-          {/* Controls */}
-          <div className="flex items-center gap-2 px-4 py-2 border-b border-[#2a2a2a] bg-[#111]">
-            <button
-              onClick={() => isPlaying ? stopPlayback() : evaluate(code)}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-                isPlaying
-                  ? "bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
-                  : "bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/30 hover:bg-[#00ff88]/30"
-              }`}
-            >
-              {isPlaying ? "⏹ Stop" : "▶ Play"}
-            </button>
-            <button
-              onClick={() => evaluate(code)}
-              className="px-4 py-1.5 rounded text-sm bg-[#1a1a1a] border border-[#333] hover:bg-[#252525] transition-colors"
-              title="Re-evaluate code"
-            >
-              ↻ Update
-            </button>
-            {error && <span className="text-red-400 text-xs ml-2">{error}</span>}
-            <span className="ml-auto text-xs text-[#444]">Strudel REPL</span>
-          </div>
+              {/* Code display */}
+              <div className="flex-1 p-4 overflow-auto">
+                <div className="h-full bg-[#141414] rounded-lg border border-[#2a2a2a] p-4 font-mono text-sm">
+                  {currentCode ? (
+                    <pre className="text-[#10b981] whitespace-pre-wrap">
+                      {currentCode}
+                    </pre>
+                  ) : (
+                    <p className="text-[#52525b]">
+                      {`// Strudel code will appear here...\n// Chat with AI or click a preset to start`}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-          {/* Code Editor */}
-          <div className="flex-1 relative">
-            <textarea
-              ref={editorRef}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault();
-                  evaluate(code);
-                }
-                // Tab support
-                if (e.key === "Tab") {
-                  e.preventDefault();
-                  const start = e.currentTarget.selectionStart;
-                  const end = e.currentTarget.selectionEnd;
-                  setCode(code.substring(0, start) + "  " + code.substring(end));
-                  setTimeout(() => {
-                    editorRef.current!.selectionStart = editorRef.current!.selectionEnd = start + 2;
-                  }, 0);
-                }
-              }}
-              spellCheck={false}
-              className="absolute inset-0 w-full h-full bg-[#0a0a0a] text-[#00ff88] font-mono text-sm p-4 resize-none outline-none leading-relaxed"
-              placeholder="// Strudel code here... (Ctrl+Enter to play)"
-            />
-          </div>
-
-          {/* Strudel iframe REPL */}
-          <iframe
-            id="strudel-frame"
-            src="/strudel.html"
-            className="hidden"
-            sandbox="allow-scripts allow-same-origin"
-          />
+              {/* Hidden Strudel iframe */}
+              <iframe
+                ref={iframeRef}
+                src="/strudel.html"
+                className="hidden"
+                allow="autoplay"
+              />
+            </>
+          )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }

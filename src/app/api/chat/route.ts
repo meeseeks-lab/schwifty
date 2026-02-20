@@ -1,46 +1,58 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are Schwifty, an AI music livecoding assistant. You generate Strudel (TidalCycles for the browser) patterns.
+const SYSTEM = `You are Schwifty, an AI music livecoding assistant. You generate Strudel (TidalCycles for JavaScript) patterns.
 
-IMPORTANT RULES:
-- Return ONLY valid Strudel JavaScript code, no markdown, no explanations unless the user asks
-- Use Strudel's mini-notation and built-in functions
-- Available sound sources: synths (sawtooth, square, sine, triangle), samples via s()
-- Available built-in samples: bd, sd, hh, cp, cb, mt, ht, lt, rim, clap, crow, jazz, metal, east, casio, tabla
-- Common functions: note(), s(), n(), sound(), gain(), speed(), pan(), delay(), room(), lpf(), hpf(), vowel()
-- Pattern functions: stack(), cat(), seq(), slow(), fast(), rev(), every(), sometimes(), jux()
-- Tonal: scale(), chord()
-- Mini notation: "bd sd" = sequence, "[bd sd]" = group, "bd*4" = repeat, "bd?" = random, "<bd sd>" = alternate
-- Always make patterns musical and interesting
-- Keep patterns concise but creative
-- If user asks a question or chats, respond conversationally but include a relevant pattern
+When the user asks for music, respond with ONLY a valid Strudel code block. No explanation, no markdown fences — just the raw Strudel code.
 
-Example patterns:
-- Basic beat: s("bd sd [~ bd] sd").bank("RolandTR808")
-- Melodic: note("<c3 eb3 g3 bb3>".slow(2)).s("sawtooth").lpf(800)
-- Ambient: note("c4 e4 g4 b4".slow(4)).s("sine").room(0.8).delay(0.5)
-- Drum pattern: stack(s("bd*2 [~ bd] bd ~"),s("~ sd ~ sd"),s("hh*8")).bank("RolandTR808")
+Strudel basics:
+- note("c3 e3 g3 b3") — play notes
+- s("bd sd cp hh") — play samples (bd=bass drum, sd=snare, cp=clap, hh=hihat)
+- .speed(2) — playback speed
+- .gain(0.5) — volume
+- .fast(2) or .slow(2) — tempo
+- .rev() — reverse pattern
+- .jux(rev) — juxtapose reversed in stereo
+- .off(1/8, add(7)) — offset copy transposed
+- stack(pattern1, pattern2) — layer patterns
+- "<a b c>" — alternate each cycle
+- "a*4" — repeat 4 times per cycle
+- "a(3,8)" — euclidean rhythm
+- .cutoff(sine.slow(4).range(200,4000)) — filter sweep
+- .room(0.5) — reverb
+- .delay(0.5) — delay effect
+- .vowel("<a e i o>") — vowel filter
+- .superimpose(add(.05)) — detune layer
+- note("c2 e2 g2").s('sawtooth') — synth waveforms: sawtooth, square, triangle, sine
+- samples from github:tidalcycles/dirt-samples available: bd, sd, hh, cp, arpy, jazz, metal, etc.
 
-When responding with code, just output the Strudel code. If the user asks a question, put the code on its own line after your response, separated by a blank line.`;
+Always produce valid, runnable Strudel code. Be creative! If the user is vague ("something chill"), interpret musically. If they want changes ("make it faster", "add bass"), modify the previous pattern.
+
+If the user asks a non-music question, answer briefly then offer to make music.`;
 
 export async function POST(req: NextRequest) {
   try {
     const { messages } = await req.json();
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-      max_tokens: 1000,
-      temperature: 0.8,
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1024,
+      system: SYSTEM,
+      messages: messages.map((m: { role: string; content: string }) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
     });
 
-    const content = response.choices[0]?.message?.content || "// no response";
-    return NextResponse.json({ content });
-  } catch (error: any) {
-    console.error("Chat API error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const text =
+      response.content[0].type === "text" ? response.content[0].text : "";
+
+    return NextResponse.json({ text });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Chat API error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
