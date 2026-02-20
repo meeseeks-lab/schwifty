@@ -47,9 +47,8 @@ const PRESETS = [
   },
 ];
 
-function encodeStrudelUrl(code: string): string {
-  const encoded = btoa(unescape(encodeURIComponent(code)));
-  return `https://strudel.cc/#${encoded}`;
+function encodeHash(code: string): string {
+  return btoa(unescape(encodeURIComponent(code)));
 }
 
 type Message = {
@@ -71,19 +70,31 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+
   const playCode = useCallback((code: string) => {
     setCurrentCode(code);
-    const url = encodeStrudelUrl(code);
     if (iframeRef.current) {
-      iframeRef.current.src = url;
+      if (!iframeLoaded) {
+        // First time: load the iframe with code in hash
+        iframeRef.current.src = `/strudel.html#${encodeHash(code)}`;
+        setIframeLoaded(true);
+      } else {
+        // Subsequent: inject code via postMessage
+        iframeRef.current.contentWindow?.postMessage(
+          { type: "setCode", code },
+          "*"
+        );
+      }
       setIsPlaying(true);
     }
-  }, []);
+  }, [iframeLoaded]);
 
   const stopCode = useCallback(() => {
     if (iframeRef.current) {
       iframeRef.current.src = "about:blank";
       setIsPlaying(false);
+      setIframeLoaded(false);
     }
   }, []);
 
@@ -302,7 +313,6 @@ export default function Home() {
               ref={iframeRef}
               className={`absolute inset-0 w-full h-full border-0 ${isPlaying ? '' : 'invisible'}`}
               allow="autoplay; microphone"
-              sandbox="allow-scripts allow-same-origin allow-popups"
             />
           </div>
         </div>
