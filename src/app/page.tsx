@@ -10,21 +10,21 @@ const PRESETS = [
   {
     name: "🎹 Ambient Keys",
     code: `note("<c3 e3 g3 b3>/2")
-  .s('triangle')
-  .cutoff(sine.slow(8).range(300,2000))
-  .gain(.4)
-  .room(.8)
-  .delay(.5)`,
+.s('triangle')
+.cutoff(sine.slow(8).range(300,2000))
+.gain(.4)
+.room(.8)
+.delay(.5)`,
   },
   {
     name: "🔊 Acid Bass",
     code: `note("<c2 c2 eb2 f2 c2 c2 eb2 g2>*2")
-  .s('sawtooth')
-  .cutoff(sine.slow(4).range(200,5000))
-  .resonance(15)
-  .gain(.5)
-  .decay(.1)
-  .sustain(0)`,
+.s('sawtooth')
+.cutoff(sine.slow(4).range(200,5000))
+.resonance(15)
+.gain(.5)
+.decay(.1)
+.sustain(0)`,
   },
   {
     name: "🌌 Space Vibes",
@@ -33,8 +33,7 @@ const PRESETS = [
   note("<[c2,g2] [d2,a2] [e2,b2] [f2,c3]>")
     .s('triangle')
     .cutoff(sine.slow(6).range(400,3000))
-    .gain(.25)
-    .room(.8)
+    .gain(.25).room(.8)
 )`,
   },
   {
@@ -42,14 +41,16 @@ const PRESETS = [
     code: `stack(
   s("bd ~ bd ~, ~ sd ~ sd, hh*8").gain(.7),
   note("<c2 [~ c2] ab1 [f1 ~]>*2")
-    .s('sawtooth')
-    .cutoff(800)
-    .gain(.5)
-    .decay(.15)
-    .sustain(0)
+    .s('sawtooth').cutoff(800).gain(.5)
+    .decay(.15).sustain(0)
 )`,
   },
 ];
+
+function encodeStrudelUrl(code: string): string {
+  const encoded = btoa(unescape(encodeURIComponent(code)));
+  return `https://strudel.cc/#${encoded}`;
+}
 
 type Message = {
   role: "user" | "assistant";
@@ -63,75 +64,34 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [currentCode, setCurrentCode] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioReady, setAudioReady] = useState(false);
-  const [engineError, setEngineError] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const engineRef = useRef<{
-    evaluate: (code: string) => Promise<void>;
-    stop: () => void;
-  } | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const playCode = useCallback(
-    async (code: string) => {
-      setCurrentCode(code);
-      setEngineError("");
-      if (engineRef.current) {
-        try {
-          await engineRef.current.evaluate(code);
-          setIsPlaying(true);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Eval error";
-          setEngineError(msg);
-          console.error("[strudel] eval:", err);
-        }
-      }
-    },
-    []
-  );
-
-  const stopCode = useCallback(() => {
-    if (engineRef.current) {
-      engineRef.current.stop();
-      setIsPlaying(false);
+  const playCode = useCallback((code: string) => {
+    setCurrentCode(code);
+    const url = encodeStrudelUrl(code);
+    if (iframeRef.current) {
+      iframeRef.current.src = url;
+      setIsPlaying(true);
     }
   }, []);
 
-  const initAudio = useCallback(async () => {
-    try {
-      const engine = await import("./strudel-engine");
-      const ok = await engine.initStrudel();
-      if (ok) {
-        engineRef.current = engine;
-        setAudioReady(true);
-      } else {
-        setEngineError("Failed to initialize audio engine");
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Init error";
-      setEngineError(msg);
-      console.error("[strudel] init:", err);
+  const stopCode = useCallback(() => {
+    if (iframeRef.current) {
+      iframeRef.current.src = "about:blank";
+      setIsPlaying(false);
     }
   }, []);
 
   const looksLikeCode = (text: string) => {
     const codeIndicators = [
-      /^s\(/m,
-      /^note\(/m,
-      /^stack\(/m,
-      /^samples\(/m,
-      /\.s\(/,
-      /\.gain\(/,
-      /\.cutoff\(/,
-      /\.room\(/,
-      /\.delay\(/,
-      /\.speed\(/,
-      /\.note\(/,
-      /\.fast\(/,
-      /\.slow\(/,
+      /^s\(/m, /^note\(/m, /^stack\(/m, /^samples\(/m,
+      /\.s\(/, /\.gain\(/, /\.cutoff\(/, /\.room\(/,
+      /\.delay\(/, /\.speed\(/, /\.note\(/, /\.fast\(/, /\.slow\(/,
     ];
     return codeIndicators.some((r) => r.test(text));
   };
@@ -166,7 +126,7 @@ export default function Home() {
       };
       setMessages([...newMessages, assistantMsg]);
 
-      if (isCode && audioReady) {
+      if (isCode) {
         playCode(data.text);
       }
     } catch (err) {
@@ -216,9 +176,6 @@ export default function Home() {
               ))}
             </div>
           )}
-          {engineError && (
-            <span className="text-xs text-[#ef4444]">{engineError}</span>
-          )}
         </div>
       </header>
 
@@ -226,12 +183,14 @@ export default function Home() {
       <div className="flex flex-1 min-h-0">
         {/* Chat Panel */}
         <div className="w-[400px] flex flex-col border-r border-[#2a2a2a] bg-[#0a0a0a]">
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
               <div className="text-[#71717a] text-sm space-y-4">
                 <p className="text-center mt-8">
                   🎵 Describe what you want to hear
+                </p>
+                <p className="text-center text-xs text-[#52525b]">
+                  Press ▶ play in the Strudel REPL on the right to start audio
                 </p>
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-wider text-[#52525b]">
@@ -272,7 +231,7 @@ export default function Home() {
                   <pre className="whitespace-pre-wrap break-words m-0 font-[inherit]">
                     {m.content}
                   </pre>
-                  {m.isCode && audioReady && (
+                  {m.isCode && (
                     <button
                       onClick={() => playCode(m.content)}
                       className="mt-2 px-2 py-1 text-xs bg-[#7c3aed] hover:bg-[#6d28d9] rounded transition"
@@ -315,51 +274,38 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Code + Audio Panel */}
-        <div className="flex-1 flex flex-col bg-[#0a0a0a]">
-          {!audioReady ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        {/* Strudel REPL Panel */}
+        <div className="flex-1 flex flex-col bg-[#0a0a0a] relative">
+          {/* Presets */}
+          <div className="flex gap-2 p-3 border-b border-[#2a2a2a] overflow-x-auto shrink-0 z-10">
+            {PRESETS.map((p) => (
               <button
-                onClick={initAudio}
-                className="px-8 py-4 bg-[#7c3aed] hover:bg-[#6d28d9] rounded-xl text-lg font-bold transition-all hover:scale-105 shadow-lg shadow-[#7c3aed]/20"
+                key={p.name}
+                onClick={() => playCode(p.code)}
+                className="px-3 py-1 text-xs bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#2a2a2a] rounded-full whitespace-nowrap transition"
               >
-                🎵 Start Audio Engine
+                {p.name}
               </button>
-              {engineError && (
-                <p className="text-sm text-[#ef4444] max-w-md text-center">{engineError}</p>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Presets */}
-              <div className="flex gap-2 p-3 border-b border-[#2a2a2a] overflow-x-auto shrink-0">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.name}
-                    onClick={() => playCode(p.code)}
-                    className="px-3 py-1 text-xs bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#2a2a2a] rounded-full whitespace-nowrap transition"
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
+            ))}
+          </div>
 
-              {/* Code display */}
-              <div className="flex-1 p-4 overflow-auto">
-                <div className="h-full bg-[#141414] rounded-lg border border-[#2a2a2a] p-4 font-mono text-sm">
-                  {currentCode ? (
-                    <pre className="text-[#10b981] whitespace-pre-wrap">
-                      {currentCode}
-                    </pre>
-                  ) : (
-                    <p className="text-[#52525b]">
-                      {`// Strudel code will appear here...\n// Chat with AI or click a preset to start`}
-                    </p>
-                  )}
-                </div>
+          {/* Embedded Strudel REPL */}
+          <div className="flex-1 relative">
+            {!isPlaying ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-[#71717a]">
+                <p className="text-lg">🎵</p>
+                <p className="text-sm">Chat or click a preset to load the Strudel REPL</p>
+                <p className="text-xs text-[#52525b]">Then press ▶ play in the REPL to hear music</p>
               </div>
-            </>
-          )}
+            ) : (
+              <iframe
+                ref={iframeRef}
+                className="absolute inset-0 w-full h-full border-0"
+                allow="autoplay; microphone"
+                sandbox="allow-scripts allow-same-origin allow-popups"
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
