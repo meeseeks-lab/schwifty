@@ -334,12 +334,12 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Hidden Strudel iframe */}
+              {/* Strudel audio engine iframe — off-screen but not hidden (browsers mute hidden iframes) */}
               <iframe
                 ref={iframeRef}
                 src="/strudel.html"
-                className="hidden"
-                allow="autoplay"
+                className="absolute -left-[9999px] w-[1px] h-[1px]"
+                allow="autoplay; microphone"
               />
             </>
           )}
